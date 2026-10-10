@@ -9,7 +9,7 @@ __pycache__/
 *.pyd
 .Python
 
-# 仮想環境（使う場合）
+# 仮想環境
 venv/
 .venv/
 env/

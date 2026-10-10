@@ -38,6 +38,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add post_history.json
+          # ファイルが存在しない場合は空の履歴を作成
+          if [ ! -f post_history.json ]; then
+            echo "[]" > post_history.json
+          fi
+          git add -f post_history.json
           git diff --staged --quiet || git commit -m "投稿履歴を更新"
           git push
