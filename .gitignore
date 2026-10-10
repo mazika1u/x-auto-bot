@@ -2,9 +2,6 @@
 .env
 cookies.json
 
-# 自動生成されるファイル
-post_history.json
-
 # Pythonのキャッシュ
 __pycache__/
 *.pyc
