@@ -1,0 +1,3 @@
+xkit-py
+google-genai
+python-dotenv

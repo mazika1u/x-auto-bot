@@ -1,0 +1,24 @@
+# 秘密情報（絶対にGitに上げない）
+.env
+cookies.json
+
+# 自動生成されるファイル
+post_history.json
+
+# Pythonのキャッシュ
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 仮想環境（使う場合）
+venv/
+.venv/
+env/
+
+# エディタ・OS固有
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
