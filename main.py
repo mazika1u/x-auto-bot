@@ -2,20 +2,21 @@ import os
 import json
 import random
 import asyncio
+import time
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from google import genai
 from twikit import Client
 
-# ローカル開発時のみ .env を読み込む（GitHub Actionsでは環境変数が直接渡される）
+# ローカル開発時のみ .env を読み込む
 load_dotenv()
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
 HISTORY_FILE = "post_history.json"
 
-# 投稿テーマのリスト（自由にカスタマイズ可能）
+# 投稿テーマ（自由に追加・変更可）
 TOPICS = [
     "今日のAI・テクノロジーに関する豆知識を1つ紹介してください。",
     "Pythonプログラミングの便利なTipsを1つ共有してください。",
@@ -23,6 +24,16 @@ TOPICS = [
     "エンジニアの生産性を上げるコツを1つ紹介してください。",
     "プログラミング学習で挫折しないためのアドバイスを1つ述べてください。",
 ]
+
+# フォールバック用モデルリスト（上から順に試行）
+# 存在しないモデル名を指定した場合は404エラーとなり、自動的に次のモデルへ進みます
+MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+]
+
+MAX_RETRIES_PER_MODEL = 3
 
 
 def load_history() -> list:
@@ -41,7 +52,7 @@ def save_history(history: list) -> None:
 
 
 def generate_post_text(topic: str) -> str:
-    """Gemini APIで投稿文を生成する"""
+    """Gemini APIで投稿文を生成する（リトライ＆フォールバック付き）"""
     client = genai.Client(api_key=GEMINI_API_KEY)
     prompt = (
         f"あなたはX（旧Twitter）の投稿を作成するアシスタントです。\n"
@@ -49,11 +60,41 @@ def generate_post_text(topic: str) -> str:
         f"ハッシュタグは2〜3個含めてください。\n"
         f"テーマ：{topic}"
     )
-    interaction = client.interactions.create(
-        model="gemini-3.8-flash",
-        input=prompt,
-    )
-    return interaction.output_text.strip()
+
+    last_error = None
+    for model_name in MODELS:
+        for attempt in range(1, MAX_RETRIES_PER_MODEL + 1):
+            try:
+                print(f"  [試行] モデル={model_name} ({attempt}/{MAX_RETRIES_PER_MODEL})")
+                interaction = client.interactions.create(
+                    model=model_name,
+                    input=prompt,
+                )
+                text = interaction.output_text.strip()
+                if not text:
+                    raise ValueError("空の応答が返されました")
+                return text
+            except Exception as e:
+                last_error = e
+                msg = str(e)
+                print(f"  [警告] {model_name}: {msg[:200]}")
+
+                # リトライ対象のエラーか判定
+                retryable = any(k in msg for k in [
+                    "503", "429",
+                    "UNAVAILABLE", "RESOURCE_EXHAUSTED",
+                    "high demand", "overloaded",
+                ])
+
+                if retryable and attempt < MAX_RETRIES_PER_MODEL:
+                    wait = (2 ** (attempt - 1)) + random.uniform(0, 1)
+                    print(f"  [待機] {wait:.1f}秒後にリトライします...")
+                    time.sleep(wait)
+                    continue
+                # リトライ不可 or 回数上限 → 次のモデルへ
+                break
+
+    raise RuntimeError(f"全てのモデルで生成に失敗しました。最後のエラー: {last_error}")
 
 
 async def post_to_x(text: str):
@@ -65,7 +106,7 @@ async def post_to_x(text: str):
 
 
 def main():
-    # 1. テーマをランダムに選択
+    # 1. テーマをランダム選択
     topic = random.choice(TOPICS)
 
     # 2. Geminiで投稿文を生成
